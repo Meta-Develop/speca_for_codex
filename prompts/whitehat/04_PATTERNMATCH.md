@@ -3,7 +3,7 @@
 * **Step 3 の PoC 結果**（`security-agent/outputs/WHITEHAT_03_POC.json`）を入力とし、検出済み攻撃シナリオを **既知パターン** と照合して重み付けを行う。
 * 参照ナレッジ：
 
-  1. **個人チェックリスト** `@security-agent/docs/checklist.md`
+  1. **個人チェックリスト** `@security-agent/docs/whitehat_checklist.md`
   2. **過去の攻撃シナリオ集** `@security-agent/docs/past_attack_scenarios.jsonl`
 * 一致度に応じて Severity を調整し、未知のパターンは **新規ライブラリ候補** として登録。
 * アップデート結果を **`security-agent/outputs/WHITEHAT_04_PATTERNMATCH.json`** に出力。
@@ -22,7 +22,7 @@
 
 ```pseudocode
 LOAD pocResults   := security-agent/outputs/WHITEHAT_03_POC.json
-LOAD checklist    := @security-agent/docs/checklist.md       // Markdown to list<string>
+LOAD checklist    := @security-agent/docs/whitehat_checklist.md       // Markdown to list<string>
 LOAD pastScenarios:= @security-agent/docs/past_attack_scenarios.jsonl // JSONL array
 ```
 
@@ -32,9 +32,9 @@ LOAD pastScenarios:= @security-agent/docs/past_attack_scenarios.jsonl // JSONL a
 
 | ソース                           | 生成物                    | 例                                                           |
 | ----------------------------- | ---------------------- | ----------------------------------------------------------- |
-| checklist.md                  | `checklistKeywords[]`  | `"reentrancy"`, `"unchecked call"`, `"fee-on-transfer"`     |
-| past\_attack\_scenarios.jsonl | `scenarioSignatures[]` | `"delegatecall msg.value reuse"`, `"oracle TWAP flashloan"` |
-| pocResults.poc\_results       | `pocSignatures[]`      | `"Vault.withdraw external call before state update"`        |
+| whitehat_checklist.md                  | `checklistKeywords[]`  | `"reentrancy"`, `"unchecked call"`, `"fee-on-transfer"`     |
+| past_attack_scenarios.jsonl | `scenarioSignatures[]` | `"delegatecall msg.value reuse"`, `"oracle TWAP flashloan"` |
+| pocResults.poc_results       | `pocSignatures[]`      | `"Vault.withdraw external call before state update"`        |
 
 * **POC 署名生成規則**: `risk_category + key_code_tokens`（大文字小文字無視、stop word 除去）
 
@@ -117,10 +117,10 @@ poc.adjusted_severity = bump(original, poc.severity_boost)
 
 ---
 
-### 6. research\_sources 追記
+### 6. research_sources 追記
 
 * 追加で参照したシナリオ URL などを `research_sources` に追記。
-* checklist.md と past\_attack\_scenarios.jsonl のパスは必ず含める。
+* whitehat_checklist.md と past_attack_scenarios.jsonl のパスは必ず含める。
 
 ---
 

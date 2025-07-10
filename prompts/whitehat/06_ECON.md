@@ -133,7 +133,7 @@ for issue in composeRes.combination_issues + pocResults.poc_results:
 ### 6. research\_sources 更新
 
 * ユースドチェーンリンク price feed URL、Etherscan tx hash、DEX pool reserves URL などを追記
-* checklist.md / past\_attack\_scenarios.jsonl パスは不要（今回は経済評価のみ）
+* whitehat_checklist.md / past\_attack\_scenarios.jsonl パスは不要（今回は経済評価のみ）
 
 ---
 

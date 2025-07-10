@@ -23,7 +23,7 @@
 
 追加リソース
 
-* 個人チェックリスト: `@security-agent/docs/checklist.md`
+* 個人チェックリスト: `@security-agent/docs/whitehat_checklist.md`
 * 攻撃シグニチャ集: `@security-agent/docs/past_attack_scenarios.jsonl`
 * (存在すれば) 既存 `pattern_library.json`
 

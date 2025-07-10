@@ -128,7 +128,7 @@ adjusted      = clamp(severity_base + combo_factor//2, Low..Critical)
 ### 6. research\_sources 追記
 
 * PoC Tx ハッシュ、Foundry testファイルパス、参考ブログ URL を追加
-* checklist.md / past\_attack\_scenarios.jsonl のパスも重複可
+* whitehat_checklist.md / past\_attack\_scenarios.jsonl のパスも重複可
 
 ---
 
