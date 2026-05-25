@@ -201,20 +201,19 @@ class BaseOrchestrator(ABC):
 
         # Select runner via the runtime registry — see scripts/orchestrator/
         # runtime_registry.py for the supported ids. ``claude`` (default)
-        # routes through ClaudeRunner (stream-json + MCP); ``api`` / ``codex``
-        # / ``gemini`` / ``ollama`` all share APIRunner / its subclasses
-        # because every one of them speaks OpenAI chat-completions wire +
-        # function-calling. ``copilot`` spawns the agentic ``@github/copilot``
-        # CLI in JSONL mode (CopilotRunner) — it owns its own tool loop via
-        # ``--allow-all-tools`` so we just stream events and parse the
-        # final result file.
+        # routes through ClaudeRunner (stream-json + MCP). ``api`` /
+        # ``gemini`` / ``ollama`` share APIRunner / its subclasses because
+        # those paths speak OpenAI chat-completions wire + function-calling.
+        # ``codex`` and ``copilot`` spawn their authenticated agentic CLIs in
+        # JSONL mode, own their own tool loops, and materialize the requested
+        # result file or directory.
         from . import runtime_registry
         from .api_runner import (
             APIRunner,
-            CodexAPIRunner,
             GeminiAPIRunner,
             OllamaAPIRunner,
         )
+        from .codex_runner import CodexRunner
         from .copilot_runner import CopilotRunner
 
         runner_type = runtime_registry.resolve_active()
@@ -231,8 +230,12 @@ class BaseOrchestrator(ABC):
                 f"  Runner: APIRunner ({os.environ.get('API_RUNNER_MODEL', 'deepseek/deepseek-r1')})"
             )
         elif runner_type == "codex":
-            self.runner = CodexAPIRunner(**runner_kwargs)
-            print(f"  Runner: CodexAPIRunner (model={self.runner.model})")
+            self.runner = CodexRunner(**runner_kwargs)
+            model_label = self.runner.model or "(CLI default)"
+            print(
+                f"  Runner: CodexRunner (model={model_label}, "
+                f"sandbox={self.runner.sandbox})"
+            )
         elif runner_type == "gemini":
             self.runner = GeminiAPIRunner(**runner_kwargs)
             print(f"  Runner: GeminiAPIRunner (model={self.runner.model})")

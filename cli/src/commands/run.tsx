@@ -34,6 +34,8 @@ export interface RunCommandFlags {
   maxConcurrent?: number;
   force?: boolean;
   budget?: number;
+  runtime?: string;
+  listRuntimes?: boolean;
   noTui?: boolean;
   json?: boolean;
   outputDir?: string;
@@ -45,22 +47,27 @@ speca run — execute SPECA pipeline phases with a live dashboard
 Usage
   $ speca run --phase <id...>           Run one or more phases by id
   $ speca run --target <id>             Run all dependencies up to <id>
+  $ speca run --list-runtimes           Show registered runtimes and exit
 
 Flags
   --phase <id...>            Phase ids (e.g. --phase 01a 01b)
   --target <id>              Run dependency chain up to <id>
   --workers <N>              Worker count (default 4)
-  --max-concurrent <N>       Max concurrent Claude executions (default 8)
+  --max-concurrent <N>       Max concurrent runtime executions (default 8)
   --force                    Ignore resume state, re-run everything
   --budget <usd>             Cost cap (forwarded to orchestrator when supported)
+  --runtime <name>           Runtime runner name (validated by Python)
+  --list-runtimes            Show registered runtimes and exit
   --output-dir <path>        Output directory (sets SPECA_OUTPUT_DIR)
   --no-tui                   Force plain-text pass-through (M6)
-  --json                     Emit raw NDJSON events on stdout (M6)
+  --json                     Emit machine-readable output on stdout (M6)
   --help, -h                 Show this help
 
 Examples
   $ speca run --phase 01a
   $ speca run --target 03 --workers 4 --max-concurrent 8
+  $ speca run --target 04 --runtime codex
+  $ speca run --list-runtimes
   $ speca run --phase 01b --force
 `;
 
@@ -116,6 +123,11 @@ async function runHeadless(
 ): Promise<number> {
   const spawnFn = opts.spawn ?? spawnPipeline;
   const handle = spawnFn(spawnOpts);
+  if (spawnOpts.listRuntimes) {
+    handle.on("stdout", (line) => {
+      process.stdout.write(line + "\n");
+    });
+  }
   handle.on("event", (event) => {
     if (mode === "json") {
       // Use M6 emitJson helper so the envelope (`ts` stamp, error fallback)
@@ -164,7 +176,8 @@ export function formatEventSummary(event: PipelineEvent): string {
 
 export async function runRunCommand(opts: RunOptions): Promise<number> {
   const phases = parsePhaseList(opts.flags.phase as unknown);
-  if (!phases?.length && !opts.flags.target) {
+  const isRuntimeListing = opts.flags.listRuntimes === true;
+  if (!phases?.length && !opts.flags.target && !isRuntimeListing) {
     process.stderr.write("speca run: must pass --phase <id...> or --target <id>\n");
     process.stderr.write(HELP_TEXT);
     return 2;
@@ -181,10 +194,13 @@ export async function runRunCommand(opts: RunOptions): Promise<number> {
   // failure short-circuits here with the matching ErrorKind. Callers can
   // disable with `skipPreflight: true` (used by tests that aren't
   // exercising this path).
-  if (!opts.skipPreflight) {
-    const expiredAuth = await detectExpiredAuth({ authFile: opts.authFile });
-    if (expiredAuth) {
-      return reportStderrError("auth-expired", expiredAuth);
+  if (!opts.skipPreflight && !isRuntimeListing) {
+    const activeRuntime = opts.flags.runtime ?? process.env.ORCHESTRATOR_RUNNER;
+    if (activeRuntime === undefined || activeRuntime === "claude") {
+      const expiredAuth = await detectExpiredAuth({ authFile: opts.authFile });
+      if (expiredAuth) {
+        return reportStderrError("auth-expired", expiredAuth);
+      }
     }
     if (!opts.flags.force) {
       const stale = await detectStaleResume({
@@ -206,9 +222,16 @@ export async function runRunCommand(opts: RunOptions): Promise<number> {
     outputDir,
     cwd,
     budget: opts.flags.budget,
+    runtime: opts.flags.runtime,
+    listRuntimes: isRuntimeListing,
+    json: opts.flags.json,
   };
 
-  const outputMode = getOutputMode({ noTui: opts.flags.noTui, json: opts.flags.json });
+  const outputMode = isRuntimeListing
+    ? opts.flags.json
+      ? "json"
+      : "no-tui"
+    : getOutputMode({ noTui: opts.flags.noTui, json: opts.flags.json });
   if (outputMode !== "tui") {
     return runHeadless(opts, spawnOpts, outputMode);
   }

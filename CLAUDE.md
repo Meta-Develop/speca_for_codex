@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-SPECA (Specification-to-Property Agentic Auditing) — an automated security audit pipeline that uses Claude Code CLI to analyze codebases for vulnerabilities. The pipeline transforms specifications into formal program graphs, generates security properties, pre-resolves code locations, performs proof-based formal audits against target code, and filters false positives via a recall-safe 3-gate review pipeline (Dead Code, Trust Boundary, Scope Check).
+SPECA (Specification-to-Property Agentic Auditing) — an automated security audit pipeline that uses Claude Code CLI by default and can also run through other runtimes such as Codex CLI. The pipeline transforms specifications into formal program graphs, generates security properties, pre-resolves code locations, performs proof-based formal audits against target code, and filters false positives via a recall-safe 3-gate review pipeline (Dead Code, Trust Boundary, Scope Check).
 
 ## Commands
 
@@ -40,7 +40,7 @@ The async Python orchestrator manages the full lifecycle of each phase:
 
 1. **config.py** — `PhaseConfig` Pydantic models define each phase (prompt path, queue/output patterns, batch strategy, circuit breaker thresholds, cost limits, MCP servers, tool filters). All phases live in `PHASE_CONFIGS` dict.
 2. **base.py** — `BaseOrchestrator` loads inputs, validates with Pydantic schemas, filters already-processed items (resume), enriches with context, creates batches, executes in parallel via asyncio. Subclasses: `Phase01Orchestrator`, `Phase02cOrchestrator`, `Phase03Orchestrator`, `Phase04Orchestrator`.
-3. **runner.py** — `ClaudeRunner` invokes `claude` CLI per batch with `--prompt-path`, `--stream-json`. Includes `CircuitBreaker` (consecutive failures, total retries, empty results) and retry with exponential backoff (max 3).
+3. **runner.py** — Runtime runner layer. `ClaudeRunner` invokes `claude` CLI per batch with `--prompt-path`, `--stream-json`; Codex audit runs use `CodexRunner` via `codex exec --json` and Codex CLI auth (`codex login`). Includes `CircuitBreaker` (consecutive failures, total retries, empty results) and retry with exponential backoff (max 3).
 4. **watchdog.py** — `LogWatcher` tails stream-json logs in real-time via async task; `CostTracker` enforces per-phase budget (hard stop on `BudgetExceeded`).
 5. **resume.py** — `ResumeManager` scans `PARTIAL_*.json` outputs, extracts processed IDs, enables incremental execution.
 6. **collector.py** — `ResultCollector` saves partial results immediately after each batch. Validation is lenient (warns but doesn't block) to preserve partial progress. Applies `output_fields` filtering to keep PARTIALs compact.
@@ -80,7 +80,7 @@ Phases 01e, 02c, 03, and 04 use **inlined prompts** (no skill fork) — all anal
 - **Partial results are first-class:** Every batch result is saved immediately. Resume scans these files to skip completed items. Never block saves on validation failures.
 - **Circuit breaker is shared:** All workers in a phase share one circuit breaker, so systemic issues (bad prompt, API outage) trigger fast abort.
 - **MCP-first code resolution:** Phase 02c uses `mcp__tree_sitter__get_symbols` / `run_query` for code location before reading files. Phase 03 uses built-in Read/Grep/Glob only (no MCP).
-- **Budget enforcement:** Cost tracking is built into `ClaudeRunner`, not bolted on. Raises `BudgetExceeded` at the runner level.
+- **Budget enforcement:** Cost tracking is built into the runner layer, not bolted on. Raises `BudgetExceeded` at the runner level.
 - **Phase 02c/03 target consistency:** The 02c CI workflow creates `outputs/TARGET_INFO.json` **before** Phase 02c runs, containing target repository and commit info. Phases 03 and 04 read this same file, ensuring consistency without redundant copies.
 - **01b subgraph index for 02c:** Phase 02c builds `outputs/01b_SUBGRAPH_INDEX.json` from 01b partials at load time. Workers use this index to find spec-level function names, state transitions, and mermaid files for improved code resolution accuracy.
 - **Phase 02c optimization:** Pre-resolves code locations for properties before Phase 03, reducing redundant MCP calls and token consumption by ~40-60%.
@@ -96,5 +96,7 @@ Phases 01e, 02c, 03, and 04 use **inlined prompts** (no skill fork) — all anal
 - `CLAUDE_CODE_PERMISSIONS=bypassPermissions` — Used in CI
 - `CLAUDE_CODE_MAX_OUTPUT_TOKENS=100000` — Used in CI
 - `GITHUB_PERSONAL_ACCESS_TOKEN` — For GitHub MCP server
+- `ORCHESTRATOR_RUNNER` — Default runtime override (`claude`, `codex`, `api`, `gemini`, `ollama`, `copilot`); `--runtime` wins when both are set.
+- Codex CLI auth — `npm install -g @openai/codex` then `codex login` for ChatGPT subscription auth, or `printenv OPENAI_API_KEY | codex login --with-api-key` to store API-key auth in the Codex CLI. Direct API-key OpenAI-compatible audit runs use the generic `api` runtime (`API_RUNNER_*`), not the primary `codex` runtime.
 - `SPECA_ARCHIVE_ROOT` — Override the per-run archive root (default: `<repo>/.speca/runs`). Use `--no-archive` to disable archiving entirely.
 - `SPECA_RUN_ID` — Pin a deterministic run-id (skips the timestamp+nonce generation). Useful for CI replay or for stitching together multi-invocation runs.

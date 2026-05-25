@@ -33,11 +33,16 @@ npx speca-cli@latest doctor    # check toolchain
 npx speca-cli@latest init       # create BUG_BOUNTY_SCOPE.json + TARGET_INFO.json
 npx speca-cli@latest run --target 04
 
-# Or run the orchestrator directly
+# Or run the orchestrator directly with the default Claude runtime
 git clone https://github.com/NyxFoundation/speca.git && cd speca
 npm install -g @anthropic-ai/claude-code
 uv sync && bash scripts/setup_mcp.sh
 uv run python3 scripts/run_phase.py --target 04 --workers 4
+
+# Codex CLI is also supported for the audit pipeline
+npm install -g @openai/codex
+codex login
+uv run python3 scripts/run_phase.py --target 04 --runtime codex --workers 4
 ```
 
 Outputs land in `outputs/<phase>_PARTIAL_*.json`. Browse with `speca-cli browse outputs/04_PARTIAL_*.json`.
