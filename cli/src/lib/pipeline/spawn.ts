@@ -24,7 +24,7 @@ export interface SpawnPipelineOptions {
   target?: string;
   /** Worker count (default 4). */
   workers?: number;
-  /** Max concurrent Claude executions (default 8). */
+  /** Max concurrent runtime executions (default 8). */
   maxConcurrent?: number;
   /** Pass `--force` to clear resume state. */
   force?: boolean;
@@ -34,6 +34,12 @@ export interface SpawnPipelineOptions {
   cwd?: string;
   /** Emit additional `--budget` argument when defined. (Reserved.) */
   budget?: number;
+  /** Runtime runner name forwarded to Python for validation. */
+  runtime?: string;
+  /** Query Python for registered runtimes instead of running phases. */
+  listRuntimes?: boolean;
+  /** Forward `--json` for query commands; phase runs always use JSON events. */
+  json?: boolean;
   /** Allow swapping the runner for tests; defaults to `uv`. */
   command?: string;
   /** Allow custom argv prefix for tests; defaults to ['run','python3','scripts/run_phase.py']. */
@@ -56,6 +62,7 @@ export interface PipelineRunHandle extends EventEmitter {
 export type PipelineRunEvent =
   | { kind: "event"; event: PipelineEvent }
   | { kind: "warn"; failure: ParseFailure }
+  | { kind: "stdout"; line: string }
   | { kind: "stderr"; line: string }
   | { kind: "exit"; code: number; signal: NodeJS.Signals | null }
   | { kind: "spawn-error"; error: Error };
@@ -63,11 +70,13 @@ export type PipelineRunEvent =
 export interface PipelineRunHandleTyped extends PipelineRunHandle {
   on(event: "event", listener: (e: PipelineEvent) => void): this;
   on(event: "warn", listener: (f: ParseFailure) => void): this;
+  on(event: "stdout", listener: (line: string) => void): this;
   on(event: "stderr", listener: (line: string) => void): this;
   on(event: "exit", listener: (code: number, signal: NodeJS.Signals | null) => void): this;
   on(event: "spawn-error", listener: (err: Error) => void): this;
   emit(event: "event", e: PipelineEvent): boolean;
   emit(event: "warn", f: ParseFailure): boolean;
+  emit(event: "stdout", line: string): boolean;
   emit(event: "stderr", line: string): boolean;
   emit(event: "exit", code: number, signal: NodeJS.Signals | null): boolean;
   emit(event: "spawn-error", err: Error): boolean;
@@ -75,7 +84,9 @@ export interface PipelineRunHandleTyped extends PipelineRunHandle {
 
 function buildArgs(opts: SpawnPipelineOptions): string[] {
   const args: string[] = [];
-  if (opts.target) {
+  if (opts.listRuntimes) {
+    args.push("--list-runtimes");
+  } else if (opts.target) {
     args.push("--target", opts.target);
   } else if (opts.phases && opts.phases.length > 0) {
     args.push("--phase", ...opts.phases);
@@ -86,7 +97,8 @@ function buildArgs(opts: SpawnPipelineOptions): string[] {
   if (opts.maxConcurrent !== undefined) args.push("--max-concurrent", String(opts.maxConcurrent));
   if (opts.force) args.push("--force");
   if (opts.outputDir) args.push("--output-dir", opts.outputDir);
-  args.push("--json");
+  if (opts.runtime !== undefined) args.push("--runtime", opts.runtime);
+  if (!opts.listRuntimes || opts.json) args.push("--json");
   return args;
 }
 
@@ -173,6 +185,10 @@ export function spawnPipeline(opts: SpawnPipelineOptions): PipelineRunHandleType
     const { lines, carry } = splitLines(chunk, stdoutCarry);
     stdoutCarry = carry;
     for (const line of lines) {
+      if (opts.listRuntimes) {
+        emitter.emit("stdout", line);
+        continue;
+      }
       const trimmed = line.trim();
       if (trimmed === "") continue;
       const event = parsePipelineEvent(trimmed, (failure) => emitter.emit("warn", failure));
@@ -198,7 +214,10 @@ export function spawnPipeline(opts: SpawnPipelineOptions): PipelineRunHandleType
       killTimer = null;
     }
     // Flush any remaining partial line.
-    if (stdoutCarry.trim() !== "") {
+    if (opts.listRuntimes && stdoutCarry !== "") {
+      emitter.emit("stdout", stdoutCarry);
+      stdoutCarry = "";
+    } else if (stdoutCarry.trim() !== "") {
       const event = parsePipelineEvent(stdoutCarry, (failure) => emitter.emit("warn", failure));
       if (event) emitter.emit("event", event);
       stdoutCarry = "";

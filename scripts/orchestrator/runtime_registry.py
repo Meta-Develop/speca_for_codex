@@ -1,29 +1,17 @@
 """Runtime registry for the orchestrator CLI.
 
 Resolves "runtime id" → "runner class" + an availability probe. Today
-two runners are wired:
+the production Claude path and several alternate runtimes are wired:
 
 * ``claude`` (default) — ClaudeRunner. Production audit path; assumes
   stream-json + tool_use shape from the Anthropic claude CLI so the
   circuit breaker, cost tracker, and resume scanner all line up.
 * ``api`` — APIRunner. Bare OpenRouter-style API client used for
   non-Claude models that speak the OpenAI chat-completions wire.
-
-Four additional runtimes are *registered* but not yet wired — they
-return a clear "not yet implemented" error if selected. Doing the
-registration here means the CLI's ``--list-runtimes`` and the env
-snapshot already know about them, which lets a downstream PR drop in a
-``ChatRunner`` subclass without touching the CLI surface.
-
-* ``codex``   — OpenAI codex CLI (``codex exec --json``).
+* ``codex``   — OpenAI Codex CLI (``codex exec --json``).
 * ``gemini``  — Google gemini CLI (``gemini -p --output-format stream-json``).
 * ``ollama``  — Ollama HTTP (``/api/chat``, cloud or self-hosted).
 * ``copilot`` — GitHub Copilot agentic CLI (``copilot`` from ``@github/copilot``).
-
-The Web side (``web/server/services/chat_runtime_*``) already has
-streaming implementations for all four; the orchestrator side is more
-demanding (resume scanning + tool_use counting + per-batch PARTIAL
-shape) and is intentionally deferred.
 """
 
 from __future__ import annotations
@@ -165,34 +153,53 @@ def _probe_api() -> RuntimeAvailability:
 
 
 def _probe_codex() -> RuntimeAvailability:
-    """Orchestrator codex path goes through CodexAPIRunner → OpenAI Chat API.
+    """Probe authenticated Codex CLI state for ``codex exec --json``."""
 
-    We do NOT require the ``codex`` CLI to be installed; the orchestrator
-    only needs ``OPENAI_API_KEY`` to authenticate against
-    ``api.openai.com/v1``. The CLI is still useful for chat-side flows
-    (see web/server/services/chat_runtime_codex.py) but is optional here.
-    """
-
-    has_key = bool(os.environ.get("OPENAI_API_KEY"))
     codex_cli = _which("codex")
+    if codex_cli is None:
+        return RuntimeAvailability(
+            runtime_id="codex",
+            available=False,
+            implemented=True,
+            notes=(
+                "codex CLI not found on PATH.",
+                "Install Codex CLI, then run `codex login` or `codex login --with-api-key`.",
+            ),
+        )
+
+    proc = _run([codex_cli, "login", "status"])
+    output = ""
+    if proc is not None:
+        output = f"{proc.stdout or ''}\n{proc.stderr or ''}".strip()
+    lower = output.lower()
+    logged_in = bool(
+        proc
+        and proc.returncode == 0
+        and (
+            "logged in" in lower
+            or "using chatgpt" in lower
+            or "api key" in lower
+        )
+        and "not logged" not in lower
+    )
+
     notes_list = [
-        "Routes through CodexAPIRunner -> https://api.openai.com/v1 (OpenAI Chat API).",
-        f"OPENAI_MODEL: {os.environ.get('OPENAI_MODEL', 'gpt-4o')}",
-        "OPENAI_API_KEY is set." if has_key else "Set OPENAI_API_KEY to authenticate.",
+        "Routes through CodexRunner -> `codex exec --json --ephemeral`.",
+        "Uses Codex CLI login state; OPENAI_API_KEY is not required.",
+        f"CODEX_MODEL: {os.environ.get('CODEX_MODEL', '(CLI default)')}",
+        f"CODEX_SANDBOX: {os.environ.get('CODEX_SANDBOX', 'workspace-write')}",
     ]
-    if codex_cli is not None:
-        proc = _run([codex_cli, "login", "status"])
-        logged_in = bool(
-            proc
-            and "logged in" in (proc.stdout or "").lower()
-            and "not logged" not in (proc.stdout or "").lower()
-        )
-        notes_list.append(
-            f"codex CLI on PATH ({'logged in' if logged_in else 'logged out'}) — only used by Web chat side."
-        )
+    if logged_in:
+        auth_label = output or "logged in"
+        notes_list.append(f"codex CLI ready: {auth_label}.")
+    else:
+        status = output or "login status unavailable"
+        notes_list.append(f"codex CLI present but not authenticated: {status}.")
+        notes_list.append("Run `codex login` or `codex login --with-api-key`.")
+
     return RuntimeAvailability(
         runtime_id="codex",
-        available=has_key,
+        available=logged_in,
         implemented=True,
         notes=tuple(notes_list),
     )
@@ -304,7 +311,7 @@ REGISTRY: dict[str, RuntimeDescriptor] = {
     ),
     "codex": RuntimeDescriptor(
         runtime_id="codex",
-        summary="OpenAI Chat API (codex CLI authenticates against this). Tool-calling enabled.",
+        summary="OpenAI Codex CLI (`codex exec --json`) using local Codex auth; no OPENAI_API_KEY required.",
         probe=_probe_codex,
         implemented=True,
     ),

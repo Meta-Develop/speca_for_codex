@@ -11,6 +11,7 @@ from __future__ import annotations
 import sys
 import warnings
 from pathlib import Path
+from subprocess import CompletedProcess
 from unittest import mock
 
 import pytest
@@ -49,8 +50,9 @@ def test_implemented_split() -> None:
 
     for impl in ("claude", "api", "codex", "gemini", "ollama", "copilot"):
         assert rr.get(impl).implemented is True, (
-            f"{impl} should be implemented — claude and copilot via dedicated "
-            "subprocess runners, the others via APIRunner / its subclasses."
+            f"{impl} should be implemented — claude, codex, and copilot via "
+            "dedicated subprocess runners; api, gemini, and ollama via "
+            "APIRunner / its subclasses."
         )
 
 
@@ -130,32 +132,65 @@ def test_probe_copilot_is_implemented() -> None:
     assert "copilotrunner" in joined or "copilot cli" in joined
 
 
+def test_probe_codex_uses_cli_login_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Codex runtime availability comes from Codex CLI auth, not OPENAI_API_KEY."""
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(rr, "_which", lambda name: "/usr/local/bin/codex")
+    monkeypatch.setattr(
+        rr,
+        "_run",
+        lambda cmd, timeout=3.0: CompletedProcess(
+            cmd,
+            0,
+            stdout="Logged in using ChatGPT\n",
+            stderr="",
+        ),
+    )
+
+    result = rr.probe("codex")
+    joined = " ".join(result.notes)
+    assert result.available is True
+    assert result.implemented is True
+    assert "codex exec --json" in joined
+    assert "OPENAI_API_KEY is not required" in joined
+    assert "ChatGPT" in joined
+
+
+def test_probe_codex_accepts_api_key_login(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(rr, "_which", lambda name: "/usr/local/bin/codex")
+    monkeypatch.setattr(
+        rr,
+        "_run",
+        lambda cmd, timeout=3.0: CompletedProcess(
+            cmd,
+            0,
+            stdout="Logged in using API key\n",
+            stderr="",
+        ),
+    )
+
+    result = rr.probe("codex")
+    assert result.available is True
+    assert any("API key" in note for note in result.notes)
+
+
+def test_probe_codex_missing_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(rr, "_which", lambda name: None)
+    result = rr.probe("codex")
+    assert result.available is False
+    joined = " ".join(result.notes)
+    assert "codex CLI not found" in joined
+    assert "OPENAI_API_KEY" not in joined
+
+
 # ---------------------------------------------------------------------------
 # APIRunner subclass defaults
 # ---------------------------------------------------------------------------
-
-
-def test_codex_runner_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
-    """CodexAPIRunner targets OpenAI's chat-completions endpoint."""
-
-    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_MODEL", raising=False)
-
-    import asyncio
-
-    from orchestrator.api_runner import CodexAPIRunner
-    from orchestrator.runner import CircuitBreaker
-
-    from orchestrator.config import get_phase_config
-
-    cfg = get_phase_config("01a")
-    sem = asyncio.Semaphore(1)
-    cb = CircuitBreaker(cfg)
-    r = CodexAPIRunner(cfg, sem, circuit_breaker=cb)
-    assert r.base_url == "https://api.openai.com/v1"
-    assert r.model == "gpt-4o"
-    assert r.RUNTIME_LABEL == "codex"
 
 
 def test_gemini_runner_defaults(monkeypatch: pytest.MonkeyPatch) -> None:

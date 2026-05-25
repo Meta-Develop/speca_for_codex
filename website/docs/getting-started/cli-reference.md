@@ -94,11 +94,11 @@ speca run --list-runtimes --json
 # OpenRouter 経由で audit
 speca run --target 04 --runtime api --workers 4
 
-# 未実装 runtime を指定すると exit 2 で安全停止
-speca run --target 04 --runtime copilot   # → exit: 2
+# Codex CLI 経由で audit (codex login 済み)
+speca run --target 04 --runtime codex --workers 4
 ```
 
-`--runtime` は `ORCHESTRATOR_RUNNER` 環境変数を上書きします。stub 状態の runtime を指定した場合は、silent fallback で誤った PARTIAL を吐くことなく exit 2 で停止します。
+`--runtime` は `ORCHESTRATOR_RUNNER` 環境変数を上書きします。`codex` は Codex CLI (`codex exec --json`) を使うため、ChatGPT subscription の `codex login` でも実行できます。API key で OpenAI 互換 endpoint を直接使いたい場合は `api` runtime に `API_RUNNER_*` を設定してください。将来 stub 状態の runtime が追加された場合は、silent fallback で誤った PARTIAL を吐くことなく exit 2 で停止します。
 
 フェーズ ID の意味は [パイプライン概要](../pipeline/overview.md) を参照してください。
 

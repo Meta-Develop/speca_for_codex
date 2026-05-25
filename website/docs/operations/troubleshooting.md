@@ -115,23 +115,40 @@ claude auth logout && claude auth login
 # 3. それでも 429 → Settings で runtime を ollama / codex に切替
 ```
 
-### Codex / Gemini で `OPENAI_API_KEY` / `GEMINI_API_KEY` が認識されない
+### Codex CLI login / Gemini API key が認識されない
 
-**手動修復:** Web サーバを起動した shell でその env が export 済か確認:
+**手動修復:** Codex は `OPENAI_API_KEY` を SPECA サーバ環境変数として直接読むのではなく、Codex CLI のログイン状態を使います。まず CLI 側の認証を確認してください:
 
 ```bash
-# Web サーバを起動するシェルで:
-echo $OPENAI_API_KEY     # 値が見えるか
+npm install -g @openai/codex
+codex login
+# API key を使う場合は Codex CLI に保存
+printenv OPENAI_API_KEY | codex login --with-api-key
+codex exec --json "ping"
+```
+
+Gemini は Web サーバを起動した shell で env が export 済か確認:
+
+```bash
 echo $GEMINI_API_KEY
 
 # 値が見えるが Settings の availability badge が `!` のまま →
 # サーバ起動後に env を変えた場合はサーバ再起動が必要
 ```
 
-Windows PowerShell:
+API key で OpenAI 互換 endpoint を直接使う場合は Codex ではなく `api` runtime を使います:
+
+```bash
+export API_RUNNER_API_KEY=sk-...
+export API_RUNNER_BASE_URL=https://api.openai.com/v1
+export API_RUNNER_MODEL=gpt-4o
+uv run python scripts/run_phase.py --target 04 --runtime api
+```
+
+Windows PowerShell で Gemini env を渡す例:
 
 ```powershell
-$env:OPENAI_API_KEY = "sk-..."
+$env:GEMINI_API_KEY = "..."
 uv run speca-web --port 7411 --serve-frontend
 ```
 
@@ -408,15 +425,28 @@ ls ~/.speca/chat/ 2>/dev/null || ls .speca/chat/
 
 ## F. Multi-runtime 特有
 
-### `--runtime codex` で exit 2 になる
+### `--runtime codex` で Codex CLI エラーになる
 
 ```text
-ERROR: runtime 'codex' cannot drive the orchestrator.
+codex: command not found
+# または login / session / auth 関連のエラー
 ```
 
-**原因:** PR #67 がまだ dev にマージされていない時点では codex / gemini / ollama は orchestrator 側 stub。
+**原因:** `codex` runtime は audit pipeline でも `CodexRunner` から `codex exec --json` を起動します。Codex CLI が未インストール、または `codex login` が未完了だと失敗します。
 
-**手動修復:** `--list-runtimes` で `(stub)` ラベルが消えるまで待つか、`api` runtime を OpenAI 互換エンドポイントで代用:
+**手動修復:**
+
+```bash
+npm install -g @openai/codex
+codex login
+# API key 認証を使う場合
+printenv OPENAI_API_KEY | codex login --with-api-key
+
+uv run python scripts/run_phase.py --list-runtimes
+uv run python scripts/run_phase.py --target 04 --runtime codex
+```
+
+OpenAI 互換 HTTP endpoint を直接叩く必要がある場合は、`codex` ではなく `api` runtime に切り替えます:
 
 ```bash
 export API_RUNNER_API_KEY=$OPENAI_API_KEY

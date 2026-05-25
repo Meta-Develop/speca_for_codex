@@ -110,6 +110,70 @@ process.exit(0);
     expect(code).toBe(7);
   });
 
+  it("passes runtime through to the Python argv", async () => {
+    const body = `
+process.stderr.write(JSON.stringify(process.argv.slice(2)) + "\\n");
+process.exit(0);
+`;
+    const handle = spawnPipeline({
+      target: "04",
+      runtime: "codex",
+      workers: 2,
+      command: NODE,
+      baseArgs: fakeScript(body),
+    });
+    const stderr: string[] = [];
+    handle.on("stderr", (line) => stderr.push(line));
+    const code = await handle.done;
+    expect(code).toBe(0);
+    expect(JSON.parse(stderr[0] ?? "[]")).toEqual([
+      "--target",
+      "04",
+      "--workers",
+      "2",
+      "--runtime",
+      "codex",
+      "--json",
+    ]);
+  });
+
+  it("passes --list-runtimes without requiring phase or target", async () => {
+    const body = `
+process.stderr.write(JSON.stringify(process.argv.slice(2)) + "\\n");
+process.exit(0);
+`;
+    const handle = spawnPipeline({
+      listRuntimes: true,
+      command: NODE,
+      baseArgs: fakeScript(body),
+    });
+    const stderr: string[] = [];
+    handle.on("stderr", (line) => stderr.push(line));
+    const code = await handle.done;
+    expect(code).toBe(0);
+    expect(JSON.parse(stderr[0] ?? "[]")).toEqual(["--list-runtimes"]);
+  });
+
+  it("forwards list-runtimes stdout as raw lines", async () => {
+    const body = `
+process.stdout.write("Active runtime: claude\\n\\n[OK] claude\\n");
+process.exit(0);
+`;
+    const handle = spawnPipeline({
+      listRuntimes: true,
+      command: NODE,
+      baseArgs: fakeScript(body),
+    });
+    const stdout: string[] = [];
+    const warns: unknown[] = [];
+    handle.on("stdout", (line) => stdout.push(line));
+    handle.on("warn", (warn) => warns.push(warn));
+    const code = await handle.done;
+    expect(code).toBe(0);
+    expect(stdout).toEqual(["Active runtime: claude", "", "[OK] claude"]);
+    expect(warns).toHaveLength(0);
+  });
+
   it("emits spawn-error and exits with 127 when the command does not exist", async () => {
     const handle = spawnPipeline({
       phases: ["01a"],
