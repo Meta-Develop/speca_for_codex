@@ -68,7 +68,7 @@ Requires **Node 20+**. For the audit pipeline you also need `uv`, `git`, and `cl
 
 ## Thanks
 
-Tracking issue: [#3](https://github.com/NyxFoundation/speca/issues/3). Spec authors: hirorogo. Implementation: hirorogo + Claude (parallel agent build).
+Tracking issue: [#3](https://github.com/NyxFoundation/speca/issues/3). Spec authors: hirorogo. Implementation: hirorogo.
 
 ---
 
