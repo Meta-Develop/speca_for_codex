@@ -2,6 +2,28 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Agent operating context and Claude-root execution split (read first)
+
+If a repo-root `AGENTS.md` exists in the checkout, it is the authoritative local
+agent operating context for this repository. Read it and follow its
+orchestration and delegation routing before planning or making changes. The
+file is local-only, so public checkouts may not have it.
+
+When the human-invoked root is a Claude-family runtime, act as the user-directed
+strategist and route all hands-on execution, including small, trivial, and
+bounded edits, to Codex through MACO/O1/O2 by default. Reserve native Claude
+subagents for read-only research and read-only review support. While delegated
+work is in flight, remain in manager mode and do not take on hands-on execution
+in parallel; conserving Claude-root token quota is an explicit goal. Perform
+direct hands-on edits only when both MACO and approved Codex CLI paths are
+unavailable or when the user explicitly directs direct action, and report
+either case as a degraded execution path.
+
+This `CLAUDE.md` and the local `AGENTS.md` grant standing delegated-worker
+authorization without requiring a per-turn `Sub agent` token. When present,
+`AGENTS.md` and `.agents/skills/agent-orchestration/SKILL.md` own the full
+durable policy.
+
 ## Project Overview
 
 SPECA (Specification-to-Property Agentic Auditing) — an automated security audit pipeline that uses Claude Code CLI by default and can also run through other runtimes such as Codex CLI. The pipeline transforms specifications into formal program graphs, generates security properties, pre-resolves code locations, performs proof-based formal audits against target code, and filters false positives via a recall-safe 3-gate review pipeline (Dead Code, Trust Boundary, Scope Check).
