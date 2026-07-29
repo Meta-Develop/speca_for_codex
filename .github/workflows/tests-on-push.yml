@@ -2,10 +2,6 @@ name: tests-on-push
 # Runs the Python + CLI test suites on every push and pull request, with daily
 # and manual runs available from the default branch.
 #
-# Uses the `self-hosted` runner label. If the repo grows multiple
-# self-hosted runners with different OS/arch profiles, narrow this with
-# additional labels (e.g. `[self-hosted, linux, x64]`).
-#
 # This workflow intentionally has no path filter and no branch filter —
 # the goal is "every push runs tests". The matrix-style cross-platform
 # coverage stays in `cli-ci.yml`, which still runs on push/PR to main.
@@ -32,7 +28,7 @@ concurrency:
 
 jobs:
   test:
-    runs-on: self-hosted
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
