@@ -298,3 +298,10 @@ outputs/20*Z-*/
 
 # Per-run trace archives (issue #32 — archive substrate)
 .speca/
+
+# Local agent context
+.agents/
+.agent
+AGENTS.md
+CLAUDE.md
+.claude/
